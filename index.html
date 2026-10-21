@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日程調整</title>
+<style>
+  :root {
+    --bg:#f5f7fa; --card:#fff; --text:#1f2937; --sub:#6b7280; --line:#e5e7eb;
+    --main:#2563eb; --ok:#16a34a; --maybe:#d97706; --ng:#dc2626; --best:#fef9c3;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif; line-height:1.6; }
+  .wrap { max-width:960px; margin:0 auto; padding:20px 14px 60px; }
+  h1 { font-size:1.5rem; margin:8px 0 4px; }
+  h2 { font-size:1.1rem; margin:0 0 12px; }
+  .desc { color:var(--sub); margin:0 0 18px; font-size:.9rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:18px; }
+  label.f { display:block; font-weight:600; font-size:.85rem; margin:0 0 4px; }
+  input[type=text], textarea { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:1rem; font-family:inherit; }
+  input[type=text]:focus, textarea:focus { outline:2px solid #bfdbfe; border-color:var(--main); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:600px){ .row { grid-template-columns:1fr; } }
+
+  .legend { font-size:.82rem; color:var(--sub); margin:6px 0 12px; }
+  .day { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .day-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .day-title { font-weight:700; }
+  .bulk button { font-size:.75rem; padding:3px 8px; border:1px solid var(--line); background:#fff; border-radius:6px; cursor:pointer; margin-left:4px; }
+  .bulk button:hover { background:#f3f4f6; }
+  .slots { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; }
+  @media (max-width:600px){ .slots { grid-template-columns:repeat(3,1fr); } }
+  .slot { border:1px solid var(--line); background:#fff; border-radius:8px; padding:6px 2px; cursor:pointer; text-align:center; user-select:none; font-family:inherit; }
+  .slot .t { display:block; font-size:.75rem; color:var(--sub); }
+  .slot .m { display:block; font-size:1.3rem; font-weight:700; line-height:1.2; color:#9ca3af; }
+  .slot.s-ok { background:#dcfce7; border-color:#86efac; } .slot.s-ok .m { color:var(--ok); }
+  .slot.s-maybe { background:#fef3c7; border-color:#fcd34d; } .slot.s-maybe .m { color:var(--maybe); }
+  .slot.s-ng { background:#fee2e2; border-color:#fca5a5; } .slot.s-ng .m { color:var(--ng); }
+
+  button.primary { background:var(--main); color:#fff; border:none; border-radius:8px; padding:12px 24px; font-size:1rem; font-weight:700; cursor:pointer; }
+  button.primary:disabled { opacity:.5; cursor:wait; }
+  button.ghost { background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px 12px; cursor:pointer; font-size:.85rem; }
+  .msg { margin-left:12px; font-size:.9rem; }
+  .msg.err { color:var(--ng); } .msg.ok { color:var(--ok); }
+  .banner { background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; padding:10px 12px; border-radius:8px; font-size:.85rem; margin-bottom:16px; }
+
+  .tbl-wrap { overflow:auto; max-height:70vh; border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:separate; border-spacing:0; width:100%; font-size:.88rem; }
+  th, td { padding:6px 10px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); text-align:center; white-space:nowrap; background:#fff; }
+  thead th { position:sticky; top:0; background:#f3f4f6; z-index:2; }
+  th.lbl, td.lbl { position:sticky; left:0; text-align:left; background:#fff; z-index:1; }
+  thead th.lbl { z-index:3; background:#f3f4f6; }
+  tr.best td { background:var(--best) !important; }
+  tr.dayrow td { background:#eef2ff !important; font-weight:700; text-align:left; }
+  .c-ok { color:var(--ok); font-weight:700; } .c-maybe { color:var(--maybe); font-weight:700; } .c-ng { color:var(--ng); font-weight:700; }
+  .namebtn { background:none; border:none; color:var(--main); cursor:pointer; font-weight:700; text-decoration:underline; font-family:inherit; font-size:inherit; }
+  .small { font-size:.78rem; color:var(--sub); }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">日程調整</h1>
+  <p class="desc" id="desc"></p>
+  <div id="demoBanner" class="banner" style="display:none">
+    デモモードで動作中です(データはこのブラウザ内にのみ保存されます)。Googleスプレッドシートに保存するには、ファイル内の <code>GAS_URL</code> に Apps Script の URL を設定してください。
+  </div>
+
+  <section class="card">
+    <h2>① 出欠を入力する</h2>
+    <div class="row">
+      <div><label class="f" for="name">名前(必須)</label><input type="text" id="name" maxlength="40" placeholder="例: 井上 和"></div>
+      <div><label class="f" for="comment">コメント(任意)</label><input type="text" id="comment" maxlength="200" placeholder="例: 変更があるかもしれませんが、その際は、Teamsで連絡します。"></div>
+    </div>
+    <p class="legend">各時間枠をタップするたびに <b>－(未回答) → ○ → △ → ×</b> と切り替わります。日ごとの一括ボタンも使えます。同じ名前で送信すると回答を上書きします。</p>
+    <div id="days"></div>
+    <div style="margin-top:14px">
+      <button class="primary" id="submit">回答を送信</button>
+      <span class="msg" id="msg"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">② みんなの回答</h2>
+      <div><span class="small" id="count"></span> <button class="ghost" id="reload">更新</button></div>
+    </div>
+    <p class="small" style="margin-top:0">黄色い行は ○ の人数が最も多い候補です。名前をクリックすると、その人の回答をフォームに読み込めます。</p>
+    <div class="tbl-wrap"><table id="result"></table></div>
+  </section>
+</div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+// Apps Script をウェブアプリとして公開したときの URL (…/exec) を貼り付けてください。
+// 空のままだと、ブラウザ内保存のデモモードで動作します。
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwk9mGyDf7--I3J5liCrmGGW3nUVu2-_IyfTV4WJE1NwBe49hdeJ9UNCGIWKnyvMdgq/exec';
+
+const EVENT_TITLE = '日程調整';
+const EVENT_DESC  = '参加できる日時を選んでください(10/26〜11/8、18:00〜23:00の1時間枠)。';
+const START_DATE  = new Date(2026, 9, 26);   // 2026/10/26
+const DAYS        = 14;                      // 〜11/8
+const HOURS       = [18,19,20,21,22,23];
+// ============================================================
+
+const WD = ['日','月','火','水','木','金','土'];
+const CYCLE = ['', '○', '△', '×'];
+const CLS = { '○':'s-ok', '△':'s-maybe', '×':'s-ng', '':'' };
+
+// 候補日リストを生成: "10/26(月) 18:00～"
+const days = [];
+for (let i = 0; i < DAYS; i++) {
+  const d = new Date(START_DATE.getFullYear(), START_DATE.getMonth(), START_DATE.getDate() + i);
+  const dl = `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`;
+  days.push({ label: dl, slots: HOURS.map(h => ({ key: `${dl} ${h}:00～`, time: `${h}:00～` })) });
+}
+const allKeys = days.flatMap(d => d.slots.map(s => s.key));
+
+let answers = {};      // key -> '○'|'△'|'×'|''
+let serverData = { candidates: [], responses: [] };
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.title = EVENT_TITLE;
+$('title').textContent = EVENT_TITLE;
+$('desc').textContent = EVENT_DESC;
+if (!GAS_URL) $('demoBanner').style.display = 'block';
+
+// ---------- 入力フォーム ----------
+function renderForm() {
+  $('days').innerHTML = days.map((d, di) => `
+    <div class="day">
+      <div class="day-head">
+        <span class="day-title">${esc(d.label)}</span>
+        <span class="bulk">
+          <button type="button" data-bulk="${di}" data-v="○">全て○</button>
+          <button type="button" data-bulk="${di}" data-v="×">全て×</button>
+          <button type="button" data-bulk="${di}" data-v="">クリア</button>
+        </span>
+      </div>
+      <div class="slots">
+        ${d.slots.map(s => {
+          const v = answers[s.key] || '';
+          return `<button type="button" class="slot ${CLS[v]}" data-key="${esc(s.key)}"><span class="t">${s.time}</span><span class="m">${v || '－'}</span></button>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+$('days').addEventListener('click', e => {
+  const slot = e.target.closest('.slot');
+  if (slot) {
+    const k = slot.dataset.key;
+    const next = CYCLE[(CYCLE.indexOf(answers[k] || '') + 1) % CYCLE.length];
+    answers[k] = next;
+    slot.className = 'slot ' + CLS[next];
+    slot.querySelector('.m').textContent = next || '－';
+    return;
+  }
+  const b = e.target.closest('[data-bulk]');
+  if (b) {
+    days[+b.dataset.bulk].slots.forEach(s => answers[s.key] = b.dataset.v);
+    renderForm();
+  }
+});
+
+// ---------- 通信 ----------
+const LS_KEY = 'chousei_demo_data';
+async function apiLoad() {
+  if (!GAS_URL) return JSON.parse(localStorage.getItem(LS_KEY) || '{"candidates":[],"responses":[]}');
+  const r = await fetch(GAS_URL, { cache: 'no-store' });
+  return r.json();
+}
+async function apiSave(payload) {
+  if (!GAS_URL) {
+    const data = JSON.parse(localStorage.getItem(LS_KEY) || '{"candidates":[],"responses":[]}');
+    data.candidates = allKeys;
+    const rec = { updated: new Date().toLocaleString('ja-JP'), name: payload.name, comment: payload.comment, answers: payload.answers };
+    const i = data.responses.findIndex(r => r.name === payload.name);
+    if (i >= 0) data.responses[i] = rec; else data.responses.push(rec);
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+    return { ok: true, ...data };
+  }
+  // text/plain にすることでCORSプリフライトを避ける
+  const r = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+  return r.json();
+}
+
+// ---------- 結果表 ----------
+function renderResult() {
+  const res = serverData.responses || [];
+  $('count').textContent = `回答者 ${res.length}人`;
+  const rows = [];
+  let bestOk = 0;
+  const stat = {};
+  allKeys.forEach(k => {
+    let o = 0, m = 0, n = 0;
+    res.forEach(r => { const v = r.answers[k]; if (v === '○') o++; else if (v === '△') m++; else if (v === '×') n++; });
+    stat[k] = { o, m, n };
+    if (o > bestOk) bestOk = o;
+  });
+  const head = `<thead><tr><th class="lbl">候補日</th><th>○</th><th>△</th><th>×</th>${
+    res.map((r, i) => `<th><button class="namebtn" data-load="${i}" title="${esc(r.comment || '')}">${esc(r.name)}</button></th>`).join('')}</tr></thead>`;
+  days.forEach(d => {
+    rows.push(`<tr class="dayrow"><td colspan="${4 + res.length}">${esc(d.label)}</td></tr>`);
+    d.slots.forEach(s => {
+      const st = stat[s.key];
+      const best = bestOk > 0 && st.o === bestOk;
+      rows.push(`<tr class="${best ? 'best' : ''}"><td class="lbl">${s.time}</td>
+        <td class="c-ok">${st.o}</td><td class="c-maybe">${st.m}</td><td class="c-ng">${st.n}</td>
+        ${res.map(r => { const v = r.answers[s.key] || '－';
+          return `<td class="${v==='○'?'c-ok':v==='△'?'c-maybe':v==='×'?'c-ng':''}">${v}</td>`; }).join('')}</tr>`);
+    });
+  });
+  const comments = res.some(r => r.comment)
+    ? `<tr><td class="lbl small">コメント</td><td colspan="3"></td>${res.map(r => `<td class="small" style="white-space:normal;min-width:120px">${esc(r.comment || '')}</td>`).join('')}</tr>` : '';
+  $('result').innerHTML = head + `<tbody>${rows.join('')}${comments}</tbody>`;
+}
+$('result').addEventListener('click', e => {
+  const b = e.target.closest('[data-load]');
+  if (!b) return;
+  const r = serverData.responses[+b.dataset.load];
+  $('name').value = r.name;
+  $('comment').value = r.comment || '';
+  answers = { ...r.answers };
+  renderForm();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  setMsg(`${r.name}さんの回答を読み込みました。修正して送信できます。`, 'ok');
+});
+
+// ---------- 操作 ----------
+function setMsg(t, cls) { const m = $('msg'); m.textContent = t; m.className = 'msg ' + (cls || ''); }
+
+async function reload() {
+  try { serverData = await apiLoad(); renderResult(); }
+  catch (e) { setMsg('読み込みに失敗しました: ' + e.message, 'err'); }
+}
+$('reload').addEventListener('click', reload);
+
+$('submit').addEventListener('click', async () => {
+  const name = $('name').value.trim();
+  if (!name) { setMsg('名前を入力してください', 'err'); $('name').focus(); return; }
+  if (!allKeys.some(k => answers[k])) { setMsg('少なくとも1つ回答してください', 'err'); return; }
+  const btn = $('submit'); btn.disabled = true; setMsg('送信中…');
+  try {
+    const out = await apiSave({ name, comment: $('comment').value.trim(), answers, candidates: allKeys });
+    if (!out.ok) throw new Error(out.error || '保存に失敗しました');
+    serverData = out; renderResult();
+    setMsg('送信しました!', 'ok');
+  } catch (e) { setMsg('送信に失敗しました: ' + e.message, 'err'); }
+  finally { btn.disabled = false; }
+});
+
+renderForm();
+reload();
+</script>
+</body>
+</html>
